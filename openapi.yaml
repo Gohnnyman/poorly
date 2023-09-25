@@ -1,0 +1,286 @@
+openapi: 3.0.0
+info:
+  title: poorly API
+  description: |-
+    OpenAPI specification for poorly's REST API
+  version: 0.1.0
+
+
+servers:
+  - url: http://0.0.0.0:8081
+  - url: /
+
+tags:
+  - name: table
+    description: Table operations
+  - name: rows
+    description: Row operations
+  - name: database
+    description: Database operations
+
+paths:
+  /{database}/{table}:
+    parameters:
+      - $ref: '#/components/parameters/Database'
+      - $ref: '#/components/parameters/Table'
+    get:
+      tags: [rows]
+      summary: Select rows from a table
+      operationId: select
+      parameters:
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Successful query
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Row'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '5XX':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [rows]
+      summary: Insert a row into a table
+      operationId: insert
+      requestBody:
+        $ref: '#/components/requestBodies/Row'
+      responses:
+        '201':
+          description: Successful insert
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '5XX':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [rows]
+      summary: Update rows in a table
+      operationId: update
+      parameters:
+        - $ref: '#/components/parameters/Filter'
+      requestBody:
+        $ref: '#/components/requestBodies/Row'
+      responses:
+        '200':
+          description: Successful update
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '5XX':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [rows]
+      summary: Delete rows from a table
+      operationId: delete
+      parameters:
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Successful deletion
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '5XX':
+          $ref: '#/components/responses/InternalError'
+  
+                
+  /{database}/create/{table}:
+    parameters:
+      - $ref: '#/components/parameters/Database'
+      - $ref: '#/components/parameters/Table'
+    post:
+      tags: [table]
+      summary: Create a table
+      operationId: create-table
+      requestBody:
+        $ref: '#/components/requestBodies/Table'
+      responses:
+        '201':
+          description: Successful table creation
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '5XX':
+          $ref: '#/components/responses/InternalError'
+          
+  /{database}/drop/{table}:
+    parameters:
+      - $ref: '#/components/parameters/Database'
+      - $ref: '#/components/parameters/Table'
+    delete:
+      tags: [table]
+      summary: Drop a table
+      operationId: drop-table
+      responses:
+        '200':
+          description: Successful table deletion
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '5XX':
+          $ref: '#/components/responses/InternalError'
+          
+  /{database}/alter/{table}:
+    parameters:
+      - $ref: '#/components/parameters/Database'
+      - $ref: '#/components/parameters/Table'
+    put:
+      tags: [table]
+      summary: Rename columns in a table
+      operationId: alter-table
+      parameters:
+        - name: renamings
+          in: query
+          description: Old:New colunm names
+          schema:
+            type: object
+            additionalProperties:
+              type: string
+          example:
+            field1: renamed-field1
+            field2: renamed-field2
+      responses:
+        '200':
+          description: Successful column renamings
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '5XX':
+          $ref: '#/components/responses/InternalError'
+
+  /{database}:
+    parameters:
+      - $ref: '#/components/parameters/Database'
+    post:
+      tags: [database]
+      summary: Create a database
+      operationId: create-database
+      responses:
+        '200':
+          description: Successful database creation
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '5XX':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags: [database]
+      summary: Drop a database
+      operationId: drop-database
+      responses:
+        '200':
+          description: Successful database drop
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '5XX':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  schemas:
+    Table:
+      type: object
+      additionalProperties:
+        type: string
+        enum: [int, float, string, char, string_invl, char_invl]
+      example:
+        id: int
+        field1: float
+        field2: string
+                
+    Row:
+      type: object
+      additionalProperties:
+        anyOf:
+          - type: string
+          - type: number
+          - type: integer
+          - type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              type: string
+      example:
+        id: 1
+        field1: test-value1
+        field2: 1488
+
+  parameters:
+    Table:
+      in: path
+      name: table
+      description: Name of the table to execute the operation on
+      required: true
+      schema:
+        type: string
+        example: table
+    Database: 
+      in: path
+      name: database
+      description: Name of the database to execute the operation on
+      required: true
+      schema:
+        type: string
+        example: test-database
+
+    Filter:
+      in: query
+      name: filter
+      required: false
+      schema:
+        type: object
+        additionalProperties:
+          anyOf:
+            - type: string
+            - type: number
+            - type: integer
+      example:
+        id: 1
+        
+  requestBodies:
+    Row:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Row'
+    Table:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Table'
+
+  responses:
+    NotFound:
+      description: A table or one of the columns does not exist
+      content:
+        application/json:
+          schema:
+            type: string
+            example: Table not found
+    BadRequest:
+      description: Request format or content is invalid
+      content:
+        application/json:
+          schema:
+            type: string
+            example: Invalid request
+    InternalError:
+      description: Internal error
+      content:
+        application/json:
+          schema:
+            type: string
+            example: IO Error
