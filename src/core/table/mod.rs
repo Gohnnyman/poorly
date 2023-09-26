@@ -1,3 +1,4 @@
+use super::schema::Columns;
 use super::types::{ColumnSet, DataType, PoorlyError, TypedValue};
 
 use std::collections::HashMap;
@@ -11,7 +12,7 @@ mod tests;
 #[derive(Debug)]
 pub struct Table {
     pub name: String,
-    pub columns: Vec<(String, DataType)>,
+    pub columns: Columns,
     pub file: File,
 }
 
@@ -53,7 +54,7 @@ impl Table {
         Ok(())
     }
 
-    pub fn open(name: String, columns: Vec<(String, DataType)>, path: &Path) -> Self {
+    pub fn open(name: String, columns: Columns, path: &Path) -> Self {
         log::info!("Opening table `{}`", name);
         let file = OpenOptions::new()
             .read(true)

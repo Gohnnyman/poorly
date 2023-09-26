@@ -23,13 +23,13 @@ pub type Columns = Vec<Column>;
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Schema {
     #[serde(serialize_with = "serialize_tables")]
-    pub tables: HashMap<String, Vec<(String, DataType)>>,
+    pub tables: HashMap<String, Columns>,
     name: String,
     kind: SchemaKind,
 }
 
 fn serialize_tables<S: serde::Serializer>(
-    tables: &HashMap<String, Vec<(String, DataType)>>,
+    tables: &HashMap<String, Columns>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     let tables: HashMap<String, HashMap<String, DataType>> = tables

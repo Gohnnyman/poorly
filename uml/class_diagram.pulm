@@ -1,0 +1,157 @@
+@startuml
+
+abstract DatabaseEng {
+    +execute(&self, query: Query) -> Result<Vec<ColumnSet>, PoorlyError>
+}
+
+enum Query {
+    Select {
+        db: String,
+        from: String,
+        columns: Vec<String>,
+        conditions: ColumnSet,
+    },
+    Insert {
+        db: String,
+        into: String,
+        values: ColumnSet,
+    },
+    Update {
+        db: String,
+        table: String,
+        set: ColumnSet,
+        conditions: ColumnSet,
+    },
+    Delete {
+        db: String,
+        from: String,
+        conditions: ColumnSet,
+    },
+    Create {
+        db: String,
+        table: String,
+        columns: Columns,
+    },
+    CreateDb {
+        name: String,
+    },
+    Drop {
+        db: String,
+        table: String,
+    },
+    DropDb {
+        name: String,
+    },
+    Alter {
+        db: String,
+        table: String,
+        rename: HashMap<String, String>,
+    },
+}
+
+
+
+class Database {
+    -tables: HashMap<String, Table>
+    -schema: Schema
+    -path: PathBuf
+
+    +drop_table(&mut self, table_name: String) -> Result<(), PoorlyError> 
+    +create_table( &mut self, table_name: String, columns: Columns) -> Result<(), PoorlyError> 
+    +alter_table( &mut self, table_name: String, rename: HashMap<String, String>) -> Result<(), PoorlyError> 
+    +create_db(db_name: String, mut path: PathBuf) -> Result<(), PoorlyError> 
+    +drop_db(&mut self) -> Result<(), PoorlyError> 
+    +get_table(&mut self, table_name: &str) -> Result<&mut Table, PoorlyError> 
+    +open(name: &str, mut path: PathBuf) -> Result<Self, PoorlyError> 
+    -update_colunms(&mut self, table: String) 
+}
+
+class Poorly {
+    -databases: HashMap<String, Database>
+    -path: PathBuf
+
+    +execute(&mut self, query: Query) -> Result<Vec<ColumnSet>, PoorlyError>
+    +drop_table(&mut self, db: String, table_name: String) -> Result<(), PoorlyError> 
+    +drop_db(&mut self, name: String) -> Result<(), PoorlyError> 
+    +alter_table(&mut self, db: String, table_name: String, rename: HashMap<String, String>) -> Result<(), PoorlyError> 
+    +create_table( &mut self, db: String, table_name: String, columns: Columns) -> Result<(), PoorlyError> 
+    -get_database(&mut self, db_name: &str) -> Result<&mut Database, PoorlyError>
+    +open(path: PathBuf) -> Self 
+    +init(&self) -> Result<(), PoorlyError> 
+    +create_db(&self, name: String) -> Result<(), PoorlyError> 
+    -get_table(&mut self, db: &str, name: &str) -> Result<&mut Table, PoorlyError> 
+}
+
+class Table {
+    +name: String
+    +columns: Vec<[String, DataType]>
+    +file: File
+
+    -next_row(&mut self) -> Option<Result<Row, io::Error>> 
+    -delete_at(&mut self, offset: u64) -> Result<(), io::Error> 
+    +open(name: String, columns: Columns, path: &Path) -> Self 
+    -coerce(&self, mut column_set: ColumnSet) -> Result<ColumnSet, PoorlyError> 
+    -check_conditions(&self, row: &ColumnSet, conditions: &ColumnSet) -> Result<bool, PoorlyError> 
+    +insert(&mut self, values: ColumnSet) -> Result<ColumnSet, PoorlyError> 
+    +select(&mut self, columns: Vec<String>, conditions: ColumnSet) -> Result<Vec<ColumnSet>, PoorlyError> 
+    +update(&mut self, set: ColumnSet, conditions: ColumnSet) -> Result<Vec<ColumnSet>, PoorlyError> 
+    +delete(&mut self, conditions: ColumnSet) -> Result<Vec<ColumnSet>, PoorlyError> 
+    +drop(&mut self) -> Result<(), PoorlyError> 
+}
+
+class Rows {
+    -row: ColumnSet
+    -offset: u64
+}
+
+annotation ColumnSet {
+    HashMap<String, TypedValue>
+}
+
+enum TypedValue {
+    Int(i64)
+    Float(f64)
+    Char(char)
+    String(String)
+    CharInvl(char, char)
+    StringInvl(String, String)
+}
+
+Table ---> Rows : \
+Used in internal methods
+
+Rows::row --> ColumnSet
+ColumnSet::HashMap --> TypedValue
+
+class Schema {
+    +tables: HashMap<String, Vec<[String, DataType]>>
+    -name: String
+    -kind: SchemaKind
+
+    +new_sqlite(name: String) -> Self 
+    +new_poorly(name: String) -> Self 
+    +is_sqlite(&self) -> bool 
+    +is_poorly(&self) -> bool 
+    +load(path: &Path) -> Schema 
+    +dump(&self, path: &Path) -> Result<(), io::Error> 
+    +create_table(&mut self, table_name: String, mut columns: Columns) -> Result<(), PoorlyError> 
+    +drop_table(&mut self, name: String) -> Result<(), PoorlyError> 
+    +alter_table(&mut self, table: String, mut rename: HashMap<String, String>) -> Result<(), PoorlyError> 
+    -validate_name(name: &str) -> Result<(), PoorlyError> 
+}
+
+enum SchemaKind {
+    Poorly
+    Sqlite
+}
+
+Schema::kind --> SchemaKind
+Database::schema --> Schema
+Poorly::databases --> Database
+Database::tables --> Table
+Poorly --left|> DatabaseEng
+DatabaseEng::execute -left-> Query
+
+
+
+@enduml

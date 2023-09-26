@@ -42,12 +42,12 @@ impl Database {
     ) -> Result<(), PoorlyError> {
         self.schema.alter_table(table_name.clone(), rename)?;
 
-        self.update_colunms(table_name);
+        self.update_columns(table_name);
 
         Ok(())
     }
 
-    fn update_colunms(&mut self, table: String) {
+    fn update_columns(&mut self, table: String) {
         self.tables
             .entry(table.clone())
             .and_modify(|e| e.columns = self.schema.tables[&table].clone());
