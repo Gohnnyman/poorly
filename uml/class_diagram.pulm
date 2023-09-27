@@ -9,43 +9,43 @@ enum Query {
         db: String,
         from: String,
         columns: Vec<String>,
-        conditions: ColumnSet,
+        conditions: ColumnSet
     },
     Insert {
         db: String,
         into: String,
-        values: ColumnSet,
+        values: ColumnSet
     },
     Update {
         db: String,
         table: String,
         set: ColumnSet,
-        conditions: ColumnSet,
+        conditions: ColumnSet
     },
     Delete {
         db: String,
         from: String,
-        conditions: ColumnSet,
+        conditions: ColumnSet
     },
     Create {
         db: String,
         table: String,
-        columns: Columns,
+        columns: Columns
     },
     CreateDb {
-        name: String,
+        name: String
     },
     Drop {
         db: String,
-        table: String,
+        table: String
     },
     DropDb {
-        name: String,
+        name: String
     },
-    Alter {
-        db: String,
-        table: String,
-        rename: HashMap<String, String>,
+    Join {
+        table1: String,
+        table2: String,
+        columns: Vec<String>
     },
 }
 

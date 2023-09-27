@@ -1,0 +1,32 @@
+@startuml UseCaseDiagram
+
+
+usecase createDb as "Create Database"
+usecase dropDb as "Drop Database"
+usecase createTable as "Create Table"
+usecase dropTable as "Drop Table"
+usecase selectRows as "Select Rows"
+usecase deleteRows as "Delete Rows"
+usecase alterRows as "Alter Rows"
+usecase insertRows as "Insert Rows"
+usecase join as "Join tables"
+
+join <|-- selectRows: "<<include>>"
+
+
+
+
+ 
+actor User
+
+User --> createDb 
+User --> dropDb 
+User --> createTable 
+User --> dropTable 
+User --> selectRows 
+User --> deleteRows 
+User --> alterRows 
+User --> insertRows 
+User --> join 
+
+@enduml
