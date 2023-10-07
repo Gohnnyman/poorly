@@ -213,8 +213,8 @@ components:
               type: string
       example:
         id: 1
-        field1: test-value1
-        field2: 1488
+        field1: 14.88
+        field2: "field2"
 
   parameters:
     Table:

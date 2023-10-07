@@ -1,5 +1,8 @@
+use rusqlite::types::Type;
+
 use super::schema::Columns;
-use super::types::{ColumnSet, DataType, PoorlyError, TypedValue};
+use super::types::{ColumnSet, DataType, PoorlyError, TableMethod, TypedValue};
+use super::DatabaseEng;
 
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -13,6 +16,8 @@ mod tests;
 pub struct Table {
     pub name: String,
     pub columns: Columns,
+    pub nullables: Vec<bool>,
+    pub serial: u32,
     pub file: File,
 }
 
@@ -56,23 +61,79 @@ impl Table {
 
     pub fn open(name: String, columns: Columns, path: &Path) -> Self {
         log::info!("Opening table `{}`", name);
-        let file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(path.join(name.clone()))
             .expect("Failed to open table");
+
+        let mut serial = 0u32;
+
+        let mut buf = [0u8; 4];
+        let tmp = file.read_exact(&mut buf);
+        if let Err(e) = tmp {
+            if e.kind() == io::ErrorKind::UnexpectedEof {
+                log::debug!("Writing serial `{}` to table `{}`", serial, name);
+                file.write_all(serial.to_le_bytes().as_ref())
+                    .expect("Failed to write to table");
+            } else {
+            }
+        } else {
+            serial = u32::from_le_bytes(buf);
+            log::debug!("Read serial `{}` from table `{}`", serial, name)
+        }
+
+        let nullables = columns
+            .iter()
+            .map(|(_, data_type)| {
+                if data_type == &DataType::Serial {
+                    true
+                } else {
+                    false
+                }
+            })
+            .collect();
+
         Self {
             name,
             columns,
             file,
+            nullables,
+            serial,
         }
     }
 
-    fn coerce(&self, mut column_set: ColumnSet) -> Result<ColumnSet, PoorlyError> {
+    fn check_restrictions(
+        &self,
+        data_type: DataType,
+        table_method: &TableMethod,
+    ) -> Result<(), PoorlyError> {
+        if table_method == &TableMethod::None {
+            return Ok(());
+        }
+
+        if data_type == DataType::Serial {
+            if table_method == &TableMethod::Insert || table_method == &TableMethod::Update {
+                return Err(PoorlyError::InvalidOperation(
+                    "Cannot insert to or update serial column".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn check_and_coerce(
+        &self,
+        mut column_set: ColumnSet,
+        table_method: TableMethod,
+    ) -> Result<ColumnSet, PoorlyError> {
+        log::error!("ABOBA3: {:#?}", column_set);
         let mut coerced = HashMap::new();
         for (column, data_type) in &self.columns {
             if let Some((column, value)) = column_set.remove_entry(column) {
+                self.check_restrictions(*data_type, &table_method)?;
                 let value = value.coerce(*data_type)?;
                 value.validate()?;
                 coerced.insert(column, value);
@@ -107,15 +168,32 @@ impl Table {
         Ok(result)
     }
 
+    fn update_serial(&mut self) -> Result<(), PoorlyError> {
+        self.file.seek(SeekFrom::Start(0))?;
+        self.serial += 1;
+        self.file.write_all(&self.serial.to_le_bytes())?;
+        self.file.seek(SeekFrom::Start(4))?;
+        Ok(())
+    }
+
     pub fn insert(&mut self, values: ColumnSet) -> Result<ColumnSet, PoorlyError> {
-        let values = self.coerce(values)?;
+        log::error!("ABOBA2: {:#?}", values);
+        let values = self.check_and_coerce(values, TableMethod::Insert)?;
         let mut row = vec![0]; // 0 - "not deleted"
         for (name, _type) in &self.columns {
+            if _type == &DataType::Serial {
+                row.extend_from_slice(&TypedValue::Serial(self.serial).into_bytes());
+                continue;
+            }
+
             let value = values
                 .get(name)
                 .ok_or_else(|| PoorlyError::IncompleteData(name.clone(), self.name.clone()))?;
+
             row.extend_from_slice(&value.clone().into_bytes());
         }
+
+        self.update_serial()?;
 
         self.file
             .seek(SeekFrom::End(0))
@@ -129,10 +207,10 @@ impl Table {
         columns: Vec<String>,
         conditions: ColumnSet,
     ) -> Result<Vec<ColumnSet>, PoorlyError> {
-        let conditions = self.coerce(conditions)?;
+        let conditions = self.check_and_coerce(conditions, TableMethod::Select)?;
         let mut selected = Vec::new();
         self.file
-            .seek(SeekFrom::Start(0))
+            .seek(SeekFrom::Start(4))
             .map_err(PoorlyError::IoError)?;
         while let Some(row) = self.next_row() {
             let Row { mut row, .. } = row.map_err(PoorlyError::IoError)?;
@@ -161,15 +239,15 @@ impl Table {
         set: ColumnSet,
         conditions: ColumnSet,
     ) -> Result<Vec<ColumnSet>, PoorlyError> {
-        let set = self.coerce(set)?;
-        let conditions = self.coerce(conditions)?;
+        let set = self.check_and_coerce(set, TableMethod::Update)?;
+        let conditions = self.check_and_coerce(conditions, TableMethod::None)?;
         let mut updated = Vec::new();
         let eof = self
             .file
             .seek(SeekFrom::End(0))
             .map_err(PoorlyError::IoError)?;
         self.file
-            .seek(SeekFrom::Start(0))
+            .seek(SeekFrom::Start(4))
             .map_err(PoorlyError::IoError)?;
         while let Some(row) = self.next_row() {
             let Row { offset, mut row } = row.map_err(PoorlyError::IoError)?;
@@ -204,10 +282,10 @@ impl Table {
     }
 
     pub fn delete(&mut self, conditions: ColumnSet) -> Result<Vec<ColumnSet>, PoorlyError> {
-        let conditions = self.coerce(conditions)?;
+        let conditions = self.check_and_coerce(conditions, TableMethod::Delete)?;
         let mut deleted = Vec::new();
         self.file
-            .seek(SeekFrom::Start(0))
+            .seek(SeekFrom::Start(4))
             .map_err(PoorlyError::IoError)?;
         while let Some(row) = self.next_row() {
             let Row { offset, row } = row.map_err(PoorlyError::IoError)?;

@@ -1,4 +1,4 @@
-@startuml
+@startuml class_diagram
 
 abstract DatabaseEng {
     +execute(&self, query: Query) -> Result<Vec<ColumnSet>, PoorlyError>

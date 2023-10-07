@@ -24,6 +24,7 @@ impl Poorly {
                 conditions,
             } => self.get_table(&db, &from)?.select(columns, conditions),
             Query::Insert { db, into, values } => {
+                log::error!("ABOBA: {:#?}", values);
                 self.get_table(&db, &into)?.insert(values).map(|v| vec![v])
             }
             Query::Update {
@@ -52,6 +53,13 @@ impl Poorly {
             Query::Alter { db, table, rename } => {
                 self.alter_table(db, table, rename)?;
                 Ok(vec![])
+            }
+            Query::Join {
+                table1,
+                table2,
+                columns,
+            } => {
+                todo!()
             }
         }
     }

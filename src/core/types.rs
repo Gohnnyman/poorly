@@ -39,6 +39,9 @@ pub enum PoorlyError {
     #[error("Name {0} cannot be used for a table or a column")]
     InvalidName(String),
 
+    #[error("Invalid email format")]
+    InvalidEmail,
+
     #[error("Invalid value {0:?} for datatype {1:?}")]
     InvalidValue(TypedValue, DataType),
 
@@ -48,8 +51,8 @@ pub enum PoorlyError {
     #[error("Invalid datatype: {0}")]
     InvalidDataType(String),
 
-    #[error("Invalid range: {0} > {1}")]
-    InvalidRange(String, String),
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
 
     #[error("IO Error: {0}")]
     IoError(#[from] std::io::Error),
@@ -111,6 +114,22 @@ pub enum Query {
         table: String,
         rename: HashMap<String, String>,
     },
+    Join {
+        table1: String,
+        table2: String,
+        columns: Vec<String>,
+    },
+}
+
+// Used for checking restrictions on columns
+// Use None to prevent any checks
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub enum TableMethod {
+    Update,
+    Select,
+    Insert,
+    Delete,
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -120,8 +139,8 @@ pub enum TypedValue {
     Float(f64),
     Char(char),
     String(String),
-    CharInvl(char, char),
-    StringInvl(String, String),
+    Serial(u32),
+    Email(String),
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
@@ -131,8 +150,8 @@ pub enum DataType {
     Float = 1,
     Char = 2,
     String = 3,
-    CharInvl = 4,
-    StringInvl = 5,
+    Serial = 4,
+    Email = 5,
 }
 
 impl rusqlite::ToSql for TypedValue {
@@ -142,8 +161,8 @@ impl rusqlite::ToSql for TypedValue {
             TypedValue::Float(f) => f.to_sql(),
             TypedValue::String(s) => s.to_sql(),
             TypedValue::Char(c) => Ok(ToSqlOutput::from(c.to_string())),
-            TypedValue::StringInvl(s1, s2) => Ok(ToSqlOutput::from(format!("{}..{}", s1, s2))),
-            TypedValue::CharInvl(c1, c2) => Ok(ToSqlOutput::from(format!("{}..{}", c1, c2))),
+            TypedValue::Serial(u) => Ok(ToSqlOutput::from(u.to_string())),
+            TypedValue::Email(e) => e.to_sql(),
         }
     }
 }
@@ -151,14 +170,10 @@ impl rusqlite::ToSql for TypedValue {
 impl TypedValue {
     pub fn validate(&self) -> Result<(), PoorlyError> {
         match self {
-            TypedValue::CharInvl(c1, c2) => {
-                if c1 > c2 {
-                    return Err(PoorlyError::InvalidRange(c1.to_string(), c2.to_string()));
-                }
-            }
-            TypedValue::StringInvl(s1, s2) => {
-                if s1 > s2 {
-                    return Err(PoorlyError::InvalidRange(s1.to_string(), s2.to_string()));
+            TypedValue::Email(email) => {
+                let email_regex = regex::Regex::new(r"^[\w\-\.]+@([\w-]+\.)+[\w\-]{2,4}$").unwrap();
+                if !email_regex.is_match(email) {
+                    return Err(PoorlyError::InvalidEmail);
                 }
             }
             _ => {}
@@ -172,8 +187,8 @@ impl TypedValue {
             TypedValue::Float(_) => DataType::Float,
             TypedValue::Char(_) => DataType::Char,
             TypedValue::String(_) => DataType::String,
-            TypedValue::CharInvl(_, _) => DataType::CharInvl,
-            TypedValue::StringInvl(_, _) => DataType::StringInvl,
+            TypedValue::Serial(_) => DataType::Serial,
+            TypedValue::Email(_) => DataType::Email,
         }
     }
 
@@ -205,12 +220,12 @@ impl TypedValue {
                 Ok(char::from(buf[0]).into())
             }
             DataType::String => Ok(TypedValue::String(read_string()?)),
-            DataType::StringInvl => Ok(TypedValue::StringInvl(read_string()?, read_string()?)),
-            DataType::CharInvl => {
-                let mut buf = [0; 2];
+            DataType::Serial => {
+                let mut buf = [0; 4];
                 reader.read_exact(&mut buf)?;
-                Ok(TypedValue::CharInvl(char::from(buf[0]), char::from(buf[1])))
+                Ok(TypedValue::Serial(u32::from_le_bytes(buf)))
             }
+            DataType::Email => Ok(TypedValue::Email(read_string()?)),
         }
     }
 
@@ -226,8 +241,8 @@ impl TypedValue {
             TypedValue::Float(f) => f.to_le_bytes().to_vec(),
             TypedValue::Char(c) => vec![c as u8],
             TypedValue::String(s) => convert_string(s),
-            TypedValue::CharInvl(c1, c2) => vec![c1 as u8, c2 as u8],
-            TypedValue::StringInvl(s1, s2) => [convert_string(s1), convert_string(s2)].concat(),
+            TypedValue::Serial(u) => u.to_le_bytes().to_vec(),
+            TypedValue::Email(s) => convert_string(s),
         }
     }
 
@@ -245,7 +260,10 @@ impl TypedValue {
         }
 
         match (&self, to) {
+            (TypedValue::Int(i), DataType::Float) => Ok(TypedValue::Float(*i as f64)),
+            (TypedValue::Int(i), DataType::Serial) => Ok(TypedValue::Serial(*i as u32)),
             (TypedValue::String(s), DataType::Char) => string_to_char(s).map(TypedValue::Char),
+            (TypedValue::String(s), DataType::Email) => Ok(TypedValue::Email(s.to_owned())),
             (TypedValue::String(s), DataType::Int) => s
                 .parse::<i64>()
                 .map(TypedValue::Int)
@@ -254,24 +272,6 @@ impl TypedValue {
                 .parse::<f64>()
                 .map(TypedValue::Float)
                 .map_err(|_| PoorlyError::InvalidValue(self, to)),
-            (TypedValue::String(s), DataType::StringInvl) => {
-                if let Some((s1, s2)) = s.split_once("..") {
-                    Ok(TypedValue::StringInvl(s1.to_string(), s2.to_string()))
-                } else {
-                    Err(PoorlyError::InvalidValue(self, to))
-                }
-            }
-            (TypedValue::String(s), DataType::CharInvl) => {
-                if let Some((s1, s2)) = s.split_once("..") {
-                    Ok(TypedValue::CharInvl(
-                        string_to_char(s1)?,
-                        string_to_char(s2)?,
-                    ))
-                } else {
-                    Err(PoorlyError::InvalidValue(self, to))
-                }
-            }
-
             (TypedValue::Char(c), DataType::String) => Ok(TypedValue::String(c.to_string())),
             (TypedValue::Char(c), DataType::Int) => c
                 .to_string()
@@ -283,12 +283,9 @@ impl TypedValue {
                 .parse::<f64>()
                 .map(TypedValue::Float)
                 .map_err(|_| PoorlyError::InvalidValue(self, to)),
+            (TypedValue::Email(s), DataType::String) => Ok(TypedValue::String(s.to_owned())),
+            (TypedValue::Serial(i), DataType::Int) => Ok(TypedValue::Int(*i as i64)),
 
-            (TypedValue::Int(i), DataType::Float) => Ok(TypedValue::Float(*i as f64)),
-            (TypedValue::StringInvl(s1, s2), DataType::CharInvl) => Ok(TypedValue::CharInvl(
-                string_to_char(s1)?,
-                string_to_char(s2)?,
-            )),
             (v, _) => Err(PoorlyError::InvalidValue(v.clone(), to)),
         }
     }
@@ -303,6 +300,12 @@ impl From<i64> for TypedValue {
 impl From<f64> for TypedValue {
     fn from(value: f64) -> Self {
         TypedValue::Float(value)
+    }
+}
+
+impl From<u32> for TypedValue {
+    fn from(value: u32) -> Self {
+        TypedValue::Serial(value)
     }
 }
 
@@ -331,8 +334,8 @@ impl ToString for TypedValue {
             TypedValue::Float(f) => f.to_string(),
             TypedValue::Char(c) => c.to_string(),
             TypedValue::String(s) => s.to_string(),
-            TypedValue::CharInvl(c1, c2) => format!("{}..{}", c1, c2),
-            TypedValue::StringInvl(s1, s2) => format!("{}..{}", s1, s2),
+            TypedValue::Serial(u) => u.to_string(),
+            TypedValue::Email(e) => e.to_string(),
         }
     }
 }
@@ -344,8 +347,8 @@ impl fmt::Debug for DataType {
             DataType::Float => write!(f, "float"),
             DataType::Char => write!(f, "char"),
             DataType::String => write!(f, "string"),
-            DataType::CharInvl => write!(f, "char_invl"),
-            DataType::StringInvl => write!(f, "string_invl"),
+            DataType::Serial => write!(f, "serial"),
+            DataType::Email => write!(f, "email"),
         }
     }
 }
@@ -359,8 +362,8 @@ impl TryFrom<&str> for DataType {
             "float" => Ok(DataType::Float),
             "char" => Ok(DataType::Char),
             "string" => Ok(DataType::String),
-            "char_invl" => Ok(DataType::CharInvl),
-            "string_invl" => Ok(DataType::StringInvl),
+            "serial" => Ok(DataType::Serial),
+            "email" => Ok(DataType::Email),
             _ => Err(PoorlyError::InvalidDataType(s.to_string())),
         }
     }
@@ -373,8 +376,8 @@ impl From<i32> for DataType {
             1 => DataType::Float,
             2 => DataType::Char,
             3 => DataType::String,
-            4 => DataType::CharInvl,
-            5 => DataType::StringInvl,
+            4 => DataType::Serial,
+            5 => DataType::Email,
             _ => unreachable!("Invalid data type"),
         }
     }
