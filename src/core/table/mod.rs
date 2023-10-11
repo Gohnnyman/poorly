@@ -16,7 +16,6 @@ mod tests;
 pub struct Table {
     pub name: String,
     pub columns: Columns,
-    pub nullables: Vec<bool>,
     pub serial: u32,
     pub file: File,
 }
@@ -84,22 +83,10 @@ impl Table {
             log::debug!("Read serial `{}` from table `{}`", serial, name)
         }
 
-        let nullables = columns
-            .iter()
-            .map(|(_, data_type)| {
-                if data_type == &DataType::Serial {
-                    true
-                } else {
-                    false
-                }
-            })
-            .collect();
-
         Self {
             name,
             columns,
             file,
-            nullables,
             serial,
         }
     }

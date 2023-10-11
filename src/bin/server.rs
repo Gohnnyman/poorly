@@ -5,7 +5,8 @@ use poorly::{
     rest,
 };
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// A database engine as poor as a house elf
 #[derive(Parser, Debug)]

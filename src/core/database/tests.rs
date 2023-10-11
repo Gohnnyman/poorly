@@ -1,4 +1,5 @@
 use super::*;
+use crate::core::types::{DataType, TypedValue};
 
 fn table() -> Table {
     Table {
