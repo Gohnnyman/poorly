@@ -813,6 +813,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
+name = "joinable"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca53fd40c2ddcb715621d1ff05e61de39f4f23f2bdd07dc3d99ba24a9300f8ec"
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1023,9 +1029,11 @@ checksum = "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
 name = "poorly"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "clap",
  "colored",
  "env_logger",
+ "joinable",
  "log",
  "once_cell",
  "prettytable-rs",

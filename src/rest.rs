@@ -8,10 +8,17 @@ use std::sync::Arc;
 
 use once_cell::sync::Lazy;
 use rusqlite::ffi::SQLITE_DBCONFIG_MAINDBNAME;
+use serde::{Deserialize, Serialize};
 use warp::http::StatusCode;
 use warp::Filter;
 
 impl warp::reject::Reject for PoorlyError {}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct JoinQuery {
+    conditions: ColumnSet,
+    join_on: HashMap<String, String>,
+}
 
 static OPENAPI_SPEC: Lazy<serde_json::Value> = Lazy::new(|| {
     let spec = include_str!("../openapi.yaml");
@@ -181,6 +188,30 @@ pub async fn serve(db_itself: Arc<dyn DatabaseEng>, address: impl Into<SocketAdd
         .and(warp::path::end())
         .map(|| warp::reply::html(include_str!("../static/index.html")));
 
+    let database = Arc::clone(&db_itself);
+    let join = warp::put()
+        .and(warp::path::param())
+        .and(warp::path::param())
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and(warp::body::json())
+        .and_then(
+            move |db: String, table1: String, table2: String, join_query: JoinQuery| {
+                let database = Arc::clone(&database);
+                execute_on(
+                    database,
+                    Query::Join {
+                        db,
+                        table1,
+                        table2,
+                        columns: vec![],
+                        conditions: join_query.conditions,
+                        join_on: join_query.join_on,
+                    },
+                )
+            },
+        );
+
     let routes = select
         .or(insert)
         .or(update)
@@ -192,6 +223,7 @@ pub async fn serve(db_itself: Arc<dyn DatabaseEng>, address: impl Into<SocketAdd
         .or(drop_db)
         .or(openapi)
         .or(index)
+        .or(join)
         .with(warp::log("api::rest"))
         .recover(handle_rejection);
 
@@ -216,6 +248,6 @@ async fn execute_on(
     db: Arc<dyn DatabaseEng>,
     query: Query,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let result = db.execute(query)?;
+    let result = db.execute(query).await?;
     Ok(warp::reply::json(&result))
 }

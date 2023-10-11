@@ -1,15 +1,21 @@
-use super::schema::Schema;
 use super::types::{ColumnSet, PoorlyError, Query};
-use std::sync::Mutex;
+use async_trait::async_trait;
+use tokio::sync::Mutex;
 
 pub mod poorly;
 
+#[async_trait]
 pub trait DatabaseEng: Send + Sync {
-    fn execute(&self, query: Query) -> Result<Vec<ColumnSet>, PoorlyError>;
+    async fn execute(&self, query: Query) -> Result<Vec<ColumnSet>, PoorlyError>;
 }
 
+#[async_trait]
 impl DatabaseEng for Mutex<poorly::Poorly> {
-    fn execute(&self, query: Query) -> Result<Vec<ColumnSet>, PoorlyError> {
-        self.lock().unwrap().execute(query)
+    async fn execute(&self, query: Query) -> Result<Vec<ColumnSet>, PoorlyError> {
+        let mut lock = self.lock().await;
+
+        let tmp = lock.execute(query).await;
+
+        tmp
     }
 }

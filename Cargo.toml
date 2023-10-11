@@ -36,6 +36,8 @@ rustyline = "10.0"
 rustyline-derive = "0.7"
 colored = "2.0"
 prettytable-rs = "0.10"
+joinable = "0.2.0"
+async-trait = "0.1.73"
 
 [dev-dependencies]
 tempfile = "3.3"

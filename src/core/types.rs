@@ -114,10 +114,16 @@ pub enum Query {
         table: String,
         rename: HashMap<String, String>,
     },
+    ShowTables {
+        db: String,
+    },
     Join {
+        db: String,
         table1: String,
         table2: String,
         columns: Vec<String>,
+        conditions: ColumnSet,
+        join_on: HashMap<String, String>,
     },
 }
 
@@ -132,7 +138,7 @@ pub enum TableMethod {
     None,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, PartialOrd)]
 #[serde(untagged)]
 pub enum TypedValue {
     Int(i64),
@@ -282,6 +288,11 @@ impl TypedValue {
                 .to_string()
                 .parse::<f64>()
                 .map(TypedValue::Float)
+                .map_err(|_| PoorlyError::InvalidValue(self, to)),
+            (TypedValue::Char(c), DataType::Serial) => c
+                .to_string()
+                .parse::<u32>()
+                .map(TypedValue::Serial)
                 .map_err(|_| PoorlyError::InvalidValue(self, to)),
             (TypedValue::Email(s), DataType::String) => Ok(TypedValue::String(s.to_owned())),
             (TypedValue::Serial(i), DataType::Int) => Ok(TypedValue::Int(*i as i64)),

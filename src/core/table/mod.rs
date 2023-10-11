@@ -1,8 +1,8 @@
+use joinable::JoinableGrouped;
 use rusqlite::types::Type;
 
 use super::schema::Columns;
 use super::types::{ColumnSet, DataType, PoorlyError, TableMethod, TypedValue};
-use super::DatabaseEng;
 
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -129,7 +129,6 @@ impl Table {
         mut column_set: ColumnSet,
         table_method: TableMethod,
     ) -> Result<ColumnSet, PoorlyError> {
-        log::error!("ABOBA3: {:#?}", column_set);
         let mut coerced = HashMap::new();
         for (column, data_type) in &self.columns {
             if let Some((column, value)) = column_set.remove_entry(column) {
@@ -168,6 +167,26 @@ impl Table {
         Ok(result)
     }
 
+    fn check_conditions_coerced(
+        &self,
+        row: &ColumnSet,
+        conditions: &ColumnSet,
+    ) -> Result<bool, PoorlyError> {
+        let mut result = true;
+        for (column, value) in conditions {
+            if let Some(row_value) = row.get(column) {
+                let value = value.clone().coerce(row_value.data_type())?;
+                result &= row_value == &value;
+            } else {
+                return Err(PoorlyError::ColumnNotFound(
+                    column.clone(),
+                    self.name.clone(),
+                ));
+            }
+        }
+        Ok(result)
+    }
+
     fn update_serial(&mut self) -> Result<(), PoorlyError> {
         self.file.seek(SeekFrom::Start(0))?;
         self.serial += 1;
@@ -177,7 +196,6 @@ impl Table {
     }
 
     pub fn insert(&mut self, values: ColumnSet) -> Result<ColumnSet, PoorlyError> {
-        log::error!("ABOBA2: {:#?}", values);
         let values = self.check_and_coerce(values, TableMethod::Insert)?;
         let mut row = vec![0]; // 0 - "not deleted"
         for (name, _type) in &self.columns {
@@ -231,6 +249,67 @@ impl Table {
             row.retain(|key, _| columns.is_empty() || columns.contains(key));
             selected.push(row);
         }
+        Ok(selected)
+    }
+
+    pub fn join(
+        &mut self,
+        other_table: &mut Table,
+        columns: Vec<String>,
+        conditions: ColumnSet,
+        join_on: HashMap<String, String>,
+    ) -> Result<Vec<ColumnSet>, PoorlyError> {
+        let get_rows = |table: &mut Table| -> Result<Vec<ColumnSet>, PoorlyError> {
+            let mut selected: Vec<ColumnSet> = Vec::new();
+            table
+                .file
+                .seek(SeekFrom::Start(4))
+                .map_err(PoorlyError::IoError)?;
+            while let Some(row) = table.next_row() {
+                let Row { row, .. } = row.map_err(PoorlyError::IoError)?;
+
+                selected.push(
+                    row.into_iter()
+                        .map(|(k, v)| (format!("{}.{}", &table.name, &k), v))
+                        .collect(),
+                );
+            }
+
+            return Ok(selected);
+        };
+
+        let rows1 = get_rows(self)?;
+        let rows2 = get_rows(other_table)?;
+
+        let it = rows1.into_iter().inner_join_grouped(&rows2[..], |r1, r2| {
+            for (k1, k2) in &join_on {
+                let v1 = r1.get(k1);
+                let v2 = r2.get(k2);
+
+                if let Some(ord) = v1.partial_cmp(&v2) {
+                    if ord != std::cmp::Ordering::Equal {
+                        return ord;
+                    }
+                } else {
+                    log::warn!("in inner_join_grouped None appeared");
+                    return std::cmp::Ordering::Less;
+                }
+            }
+
+            std::cmp::Ordering::Equal
+        });
+
+        let mut selected = Vec::new();
+
+        for (mut v1, v2) in it.into_iter() {
+            v2.into_iter().for_each(|map| v1.extend(map.clone()));
+            if !self.check_conditions_coerced(&v1, &conditions)? {
+                continue;
+            }
+            v1.retain(|k, _| columns.is_empty() || columns.contains(k));
+            selected.push(v1);
+        }
+
         Ok(selected)
     }
 
