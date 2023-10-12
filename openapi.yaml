@@ -160,6 +160,27 @@ paths:
         '5XX':
           $ref: '#/components/responses/InternalError'
 
+  /{database}/{table1}/{table2}:
+    parameters:
+      - $ref: '#/components/parameters/Database'
+      - $ref: '#/components/parameters/Table1'
+      - $ref: '#/components/parameters/Table2'
+    put:
+      tags: [table]
+      summary: Join two tables
+      operationId: join-tables
+      requestBody: 
+        $ref: '#/components/requestBodies/JoinQuery'
+      responses:
+        '200':
+          description: Successful join 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '5XX':
+          $ref: '#/components/responses/InternalError'
+
   /{database}:
     parameters:
       - $ref: '#/components/parameters/Database'
@@ -193,7 +214,7 @@ components:
       type: object
       additionalProperties:
         type: string
-        enum: [int, float, string, char, string_invl, char_invl]
+        enum: [int, float, string, char, email, serial]
       example:
         id: int
         field1: float
@@ -216,6 +237,27 @@ components:
         field1: 14.88
         field2: "field2"
 
+    JoinQuery:
+      type: object
+      properties:
+        conditions:
+          type: object
+          additionalProperties:
+            anyOf:
+              - type: string
+              - type: number
+              - type: integer
+        join_on:
+          type: object
+          additionalProperties:
+            anyOf:
+              - type: string
+      example:
+        conditions: 
+          "table1.id": 1
+        join_on:
+          "table1.id": "table2.id"
+
   parameters:
     Table:
       in: path
@@ -225,6 +267,22 @@ components:
       schema:
         type: string
         example: table
+    Table1:
+      in: path
+      name: table1
+      description: Name of the second table to execute the operation on
+      required: true
+      schema:
+        type: string
+        example: table1
+    Table2:
+      in: path
+      name: table2
+      description: Name of the second table to execute the operation on
+      required: true
+      schema:
+        type: string
+        example: table2
     Database: 
       in: path
       name: database
@@ -247,6 +305,7 @@ components:
             - type: integer
       example:
         id: 1
+
         
   requestBodies:
     Row:
@@ -261,6 +320,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Table'
+    JoinQuery:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/JoinQuery'
 
   responses:
     NotFound:
