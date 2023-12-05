@@ -1,0 +1,115 @@
+syntax = "proto3";
+package database;
+
+message TypedValue {
+    oneof data {
+        int64 int = 1;
+        double float = 2;
+        string string = 3;
+        uint32 serial = 4;
+        string email = 5;
+    }
+}
+
+
+enum DataType {
+        Int = 0;
+        Float = 1;
+        Char = 2;
+        String = 3;
+        Serial = 4;
+        Email = 5;
+}
+
+message Select {
+    string db = 1; 
+    string from = 2;
+    repeated string columns = 3;
+    map<string, TypedValue> conditions = 4;
+}
+
+message Insert {
+    string db = 1;
+    string into = 2;
+    map<string, TypedValue> values = 3;
+}
+
+message Update {
+    string db = 1;
+    string table = 2;
+    map<string, TypedValue> set = 3;
+    map<string, TypedValue> conditions = 4;
+}
+
+message Delete {
+    string db = 1;
+    string from = 2;
+    map<string, TypedValue> conditions = 3;
+}
+
+message Create {
+    string db = 1;
+    string table = 2;
+    map<string, DataType> columns = 3;
+}
+
+message CreateDb {
+    string db = 1;
+}
+
+message Drop {
+    string db = 1;
+    string table = 2;
+}
+
+message DropDb {
+    string db = 1;
+}
+
+message Alter {
+    string db = 1;
+    string table = 2;
+    // column renamings
+    map<string, string> rename = 3;
+}
+
+message ShowTables {
+    string db = 1;
+}
+
+message Join {
+    string db = 1;
+    string table1 = 2;
+    string table2 = 3;
+    repeated string columns = 4;
+    map<string, TypedValue> conditions = 5;
+    map<string, string> join_on = 6;
+}
+
+
+message Query {
+    oneof query {
+        Select select = 1;
+        Insert insert = 2;
+        Update update = 3;
+        Delete delete = 4;
+        Create create = 5;
+        CreateDb createDb = 6;
+        Drop drop = 7;
+        DropDb dropDb = 8;
+        Alter alter = 9;
+        ShowTables showTables = 10;
+        Join join = 11;
+    }
+}
+
+message Reply {
+    message Row {
+        map<string, TypedValue> data = 1;
+    }
+    repeated Row rows = 1;
+}
+
+service Database {
+    rpc Execute(Query) returns (Reply);
+}

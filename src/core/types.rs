@@ -160,6 +160,19 @@ pub enum DataType {
     Email = 5,
 }
 
+impl From<DataType> for i32 {
+    fn from(data_type: DataType) -> Self {
+        match data_type {
+            DataType::Int => 0,
+            DataType::Float => 1,
+            DataType::Char => 2,
+            DataType::String => 3,
+            DataType::Serial => 4,
+            DataType::Email => 5,
+        }
+    }
+}
+
 impl rusqlite::ToSql for TypedValue {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, rusqlite::Error> {
         match self {

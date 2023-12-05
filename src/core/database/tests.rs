@@ -1,5 +1,3 @@
-use std::hash::Hash;
-
 use super::*;
 use crate::core::types::{DataType, TypedValue};
 

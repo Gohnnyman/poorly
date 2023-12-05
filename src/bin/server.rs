@@ -2,7 +2,7 @@ use clap::Parser;
 use env_logger::Env;
 use poorly::{
     core::{DatabaseEng, Poorly},
-    rest,
+    grpc, rest,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -53,8 +53,13 @@ async fn main() {
         .rest
         .map(|port| rest::serve(Arc::clone(&db), ([0, 0, 0, 0], port)));
 
+    let grpc_server = args
+        .grpc
+        .map(|port| grpc::serve(Arc::clone(&db), ([0, 0, 0, 0], port)));
+
     tokio::select! {
         _ = async { rest_server.unwrap().await }, if rest_server.is_some() => {},
+        _ = async { grpc_server.unwrap().await }, if grpc_server.is_some() => {},
         _ = tokio::signal::ctrl_c() => {
             log::info!(target: "poorly::server", "Shutting down...");
         },

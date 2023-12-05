@@ -27,10 +27,10 @@ serde_json = "1.0"
 serde_yaml = "0.9"
 regex = "1"
 
-tokio = { version = "1.24", features = ["rt-multi-thread", "signal"] }
+tokio = { version = "1.24", features = ["rt-multi-thread", "signal", "macros"] }
 warp = "0.3"
-tonic = "0.8"
-prost = "0.11"
+tonic = "0.10"
+prost = "0.12"
 
 rustyline = "10.0"
 rustyline-derive = "0.7"
@@ -38,9 +38,10 @@ colored = "2.0"
 prettytable-rs = "0.10"
 joinable = "0.2.0"
 async-trait = "0.1.73"
+anyhow = "1.0.75"
 
 [dev-dependencies]
 tempfile = "3.3"
 
 [build-dependencies]
-tonic-build = "0.8"
+tonic-build = "0.10"
