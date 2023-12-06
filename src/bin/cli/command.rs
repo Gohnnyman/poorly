@@ -185,10 +185,14 @@ impl FromStr for Command {
             ["Join", db, table1, table2, columns, conditions, join_on] => {
                 // Parse and construct Join variant
                 let columns = columns.split(',').map(|s| s.to_string()).collect();
-                let conditions = conditions
-                    .split(',')
-                    .map(|s| parse_key_val::<TypedValue>(s))
-                    .collect::<Result<_, _>>()?;
+                let conditions = if conditions != &"_" {
+                    conditions
+                        .split(',')
+                        .map(|s| parse_key_val::<TypedValue>(s))
+                        .collect::<Result<_, _>>()?
+                } else {
+                    HashMap::new()
+                };
 
                 let join_on = join_on
                     .split(',')
